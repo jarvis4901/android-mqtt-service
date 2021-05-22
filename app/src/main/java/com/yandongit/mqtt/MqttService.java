@@ -31,15 +31,18 @@ public class MqttService extends Service {
         }
     }
 
+    /**
+     * 连接mqtt服务器
+     */
     private void connectMqttService() {
-        String userId = "10086";
-        String[] topics = {"topic1"};
-        String topic = "sdasda";
+        String userId = "test";
+        String[] topics = {"test"};
+        String topic = "test";
         MqttProxy proxy = MqttProxy.getInstance();
         MqttOption options = new MqttOption.Builder()
-                .setServerUrl("tcp://192.168.1.211:1883")
-                .setUsername("admin")
-                .setPassWord("admin")
+                .setServerUrl("tcp://192.168.1.102:1883")
+                .setUsername("test")
+                .setPassWord("test")
                 .setClientId(userId)
                 .setTopics(topics)
                 .build();
@@ -66,8 +69,8 @@ public class MqttService extends Service {
         //订阅消息接收
         mDisposables.add(proxy.subscriberMessage().subscribeOn(Schedulers.io()).observeOn(AndroidSchedulers.mainThread()).subscribeWith(new DisposableObserver<MqttMessage>() {
             @Override
-            public void onNext(@NonNull MqttMessage message) {
-
+            public void onNext(@NonNull MqttMessage msgData) {
+                Log.i(TAG, "Mqtt接收到消息:" + msgData.getMessage());
             }
 
             @Override
@@ -85,7 +88,8 @@ public class MqttService extends Service {
         mDisposables.add(proxy.subscribeConnectionStatus().subscribeOn(Schedulers.io()).observeOn(AndroidSchedulers.mainThread()).subscribeWith(new DisposableObserver<MqttConnectStatus>() {
             @Override
             public void onNext(@NonNull MqttConnectStatus mqttConnectStatus) {
-
+                Log.i(TAG, "Mqtt连接状态:" + mqttConnectStatus.isLost());
+                Log.i(TAG, "Mqtt重连状态:" + mqttConnectStatus.isRetry());
             }
 
             @Override

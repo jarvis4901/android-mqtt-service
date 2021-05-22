@@ -1,6 +1,7 @@
 package com.yandongit.mqtt;
 
 import android.content.Context;
+import android.util.Log;
 
 import org.eclipse.paho.android.service.MqttAndroidClient;
 import org.eclipse.paho.client.mqttv3.IMqttActionListener;
@@ -57,9 +58,8 @@ public class MqttManager implements MqttApi {
     }
 
 
-    public MqttManager() {
-//        Context context;
-//        mContext = context.getApplicationContext();
+    public MqttManager(Context context) {
+        mContext = context.getApplicationContext();
     }
 
     @Override
@@ -67,62 +67,78 @@ public class MqttManager implements MqttApi {
         mCurrentApplyOption = option;
         return Observable.create(new ObservableOnSubscribe<Boolean>() {
             @Override
-            public void subscribe(@NonNull ObservableEmitter<Boolean> emitter) throws Throwable {
-                if (mMqttClient == null) {
-                    mMqttClient = new MqttAndroidClient(mContext, option.getServerUrl(), option.getClientId(), new MemoryPersistence());
-                }
-                if (isConnect) {
-                    emitter.onNext(true);
-                    return;
-                }
-
-                if (!MqttNetUtil.hasNetWorkStatus(mContext, false)) {
-                    emitter.onNext(false);
-                    return;
-                }
-
-                //进行连接的配置
-                MqttConnectOptions connectOptions = new MqttConnectOptions();
-                //如果为false(flag=0)，Client断开连接后，Server应该保存Client的订阅信息
-                //如果为true(flag=1)，表示Server应该立刻丢弃任何会话状态信息
-                connectOptions.setCleanSession(true);
-                //设置用户名和密码
-                connectOptions.setUserName(option.getUsername());
-                connectOptions.setPassword(option.getPassWord().toCharArray());
-                //设置连接超时时间
-                connectOptions.setConnectionTimeout(option.getConnectionTimeout());
-                //设置心跳发送间隔时间，单位秒
-                connectOptions.setKeepAliveInterval(option.getKeepAliveInterval());
-                //设置遗嘱
-                connectOptions.setWill("android-mqtt-offline-topic", "android-mqtt-is_offline".getBytes(), MqttQos.QOS0.getCode(), false);
-
-                //开始连接
-                mMqttClient.connect(connectOptions, null, new IMqttActionListener() {
-                    @Override
-                    public void onSuccess(IMqttToken asyncActionToken) {
-                        //连接成功
-                        emitter.onNext(true);
-                    }
-
-                    @Override
-                    public void onFailure(IMqttToken asyncActionToken, Throwable exception) {
-                        //连接失败
-                        exception.printStackTrace();
+            public void subscribe(@NonNull ObservableEmitter<Boolean> emitter) {
+                try {
+                    if (mContext == null) {
                         emitter.onNext(false);
+                        return;
                     }
-                });
+                    if (mMqttClient == null) {
+                        mMqttClient = new MqttAndroidClient(mContext, option.getServerUrl(), option.getClientId(), new MemoryPersistence());
+                    }
+                    if (isConnect) {
+                        emitter.onNext(true);
+                        return;
+                    }
+
+                    if (!MqttNetUtil.hasNetWorkStatus(mContext, false)) {
+                        emitter.onNext(false);
+                        return;
+                    }
+
+                    //进行连接的配置
+                    MqttConnectOptions connectOptions = new MqttConnectOptions();
+                    //如果为false(flag=0)，Client断开连接后，Server应该保存Client的订阅信息
+                    //如果为true(flag=1)，表示Server应该立刻丢弃任何会话状态信息
+                    connectOptions.setCleanSession(true);
+                    //设置用户名和密码
+                    connectOptions.setUserName(option.getUsername());
+                    connectOptions.setPassword(option.getPassWord().toCharArray());
+                    //设置连接超时时间
+                    connectOptions.setConnectionTimeout(option.getConnectionTimeout());
+                    //设置心跳发送间隔时间，单位秒
+                    connectOptions.setKeepAliveInterval(option.getKeepAliveInterval());
+                    //设置遗嘱
+                    connectOptions.setWill("android-mqtt-offline-topic", "android-mqtt-is_offline".getBytes(), MqttQos.QOS0.getCode(), false);
+
+                    //开始连接
+                    mMqttClient.connect(connectOptions, null, new IMqttActionListener() {
+                        @Override
+                        public void onSuccess(IMqttToken asyncActionToken) {
+                            //连接成功
+                            emitter.onNext(true);
+                        }
+
+                        @Override
+                        public void onFailure(IMqttToken asyncActionToken, Throwable exception) {
+                            //连接失败
+                            exception.printStackTrace();
+                            emitter.onNext(false);
+                        }
+                    });
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    emitter.onNext(false);
+                }
+
             }
         }).flatMap(new Function<Boolean, ObservableSource<Boolean>>() {
             @Override
-            public ObservableSource<Boolean> apply(Boolean isSuccess) throws Throwable {
-                //连接成功，
-                if (isSuccess) {
-                    //订阅主题
-                    return subscribeTopic(mCurrentApplyOption.getTopics());
-                } else {
+            public ObservableSource<Boolean> apply(Boolean isSuccess) {
+                try {
+                    //连接成功，
+                    if (isSuccess) {
+                        //订阅主题
+                        return subscribeTopic(mCurrentApplyOption.getTopics());
+                    } else {
+                        //连接失败，重试
+                        return Observable.error(new MqttImproperCloseException());
+                    }
+                } catch (Exception e) {
                     //连接失败，重试
                     return Observable.error(new MqttImproperCloseException());
                 }
+
             }
         }).doOnNext(new Consumer<Boolean>() {
             @Override
@@ -138,9 +154,11 @@ public class MqttManager implements MqttApi {
                         mMqttClient = null;
                         //所有异常都走重试，延时指定秒值进行重试
                         return Observable.timer(mCurrentApplyOption.getRetryIntervalTime(), TimeUnit.SECONDS).doOnNext(new Consumer<Long>() {
+
                             @Override
                             public void accept(Long aLong) throws Throwable {
                                 if (mConnectionStatusListener != null) {
+                                    Log.i("尝试重连：","---------------");
                                     mConnectionStatusListener.onRetryConnection();
                                 }
                             }
@@ -321,6 +339,7 @@ public class MqttManager implements MqttApi {
 
     /**
      * 订阅主题，传入需要订阅的多个主题的数组
+     *
      * @param topic 主题
      * @return
      */
@@ -351,6 +370,7 @@ public class MqttManager implements MqttApi {
 
     /**
      * 取消订阅主题，传入需要取消订阅的Topic数组
+     *
      * @param topic 主题
      * @return
      */

@@ -9,7 +9,9 @@ public class MqttProxy implements MqttApi {
     private final MqttApi mImpl;
 
     private MqttProxy() {
-        mImpl = new MqttManager();
+
+
+        mImpl = new MqttManager(MyApplication.getContext());
     }
 
     private static final class SingleHolder {

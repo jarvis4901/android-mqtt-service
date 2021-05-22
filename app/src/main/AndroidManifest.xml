@@ -2,7 +2,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.yandongit.mqtt">
 
+    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
+
     <application
         android:name=".MyApplication"
         android:allowBackup="true"
@@ -12,7 +15,16 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Mqtt">
         <!-- 通知模块的Mqtt消息接收服务 -->
-        <service android:name=".MqttService" />
+        <service android:name="org.eclipse.paho.android.service.MqttService" />
+        <service
+            android:name=".MqttService"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.yandongit.mqtt.mMqttService" />
+            </intent-filter>
+        </service>
+
         <activity android:name=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
